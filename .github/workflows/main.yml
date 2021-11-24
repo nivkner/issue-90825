@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  test:
+    name: Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        build: [aarch64-linux, riscv64-linux, arm-linux]
+        include:
+          - build: aarch64-linux
+            os: ubuntu-latest
+            rust: nightly
+            target: aarch64-unknown-linux-gnu
+            gcc_package: gcc-aarch64-linux-gnu
+            gcc: aarch64-linux-gnu-gcc
+            qemu: qemu-aarch64 -L /usr/aarch64-linux-gnu
+            host_target: aarch64-unknown-linux-gnu
+          - build: riscv64-linux
+            os: ubuntu-latest
+            rust: nightly
+            target: riscv64gc-unknown-linux-gnu
+            gcc_package: gcc-riscv64-linux-gnu
+            gcc: riscv64-linux-gnu-gcc
+            qemu: qemu-riscv64 -L /usr/riscv64-linux-gnu
+            host_target: riscv64gc-unknown-linux-gnu
+          - build: arm-linux
+            os: ubuntu-latest
+            rust: nightly
+            target: armv5te-unknown-linux-gnueabi
+            gcc_package: gcc-arm-linux-gnueabi
+            gcc: arm-linux-gnueabi-gcc
+            qemu: qemu-arm -L /usr/arm-linux-gnueabi
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: true
+    - uses: ./.github/actions/install-rust
+      with:
+        toolchain: ${{ matrix.rust }}
+
+    - name: Configure target
+      run: |
+        rustup target add ${{ matrix.target }}
+
+    - name: Install cross-compilation tools and libraries
+      run: |
+        set -ex
+        sudo apt-get update
+        sudo apt-get install -y ${{ matrix.gcc_package }} ${{ matrix.libc_package }} qemu-user
+
+    - name: run program
+      run: |
+        rustc src/main.rs --target=${{ matrix.target }} -Clinker=${{ matrix.gcc }}
+        ${{ matrix.qemu }} main
+      env:
+        RUST_BACKTRACE: 1
